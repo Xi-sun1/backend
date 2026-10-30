@@ -1,6 +1,5 @@
 const db = require('../models');
 
-// helper: 将相对路径（以 / 开头）转换为绝对 HTTP URL
 function toAbsoluteUrl(req, value) {
   if (!value) return value;
   if (/^https?:\/\//i.test(value)) return value;
@@ -8,8 +7,9 @@ function toAbsoluteUrl(req, value) {
   return value.startsWith('/') ? host + value : host + '/' + value;
 }
 
-// 情绪映射规则
 const emotionMapping = {
+  happy: { types: ['happy','excited'], description: '欢快的音乐' },
+  excited: { types: ['happy','excited'], description: '欢快的音乐' },
   'happy,excited': {
     types: ['happy', 'excited'],
     description: '欢快、积极的音乐'
@@ -24,21 +24,31 @@ const emotionMapping = {
   }
 };
 
+function formatSong(req, song) {
+  return {
+    id: song.id,
+    title: song.song_name,
+    artist: song.artist || 'Unknown Artist',
+    cover: toAbsoluteUrl(req, song.cover_url) || '',
+    url: toAbsoluteUrl(req, song.music_url),
+    bg_url: toAbsoluteUrl(req, song.bg_url),
+    mood_type: song.mood_type,
+    duration: song.duration || 0
+  };
+}
+
 const MusicController = {
-  // 根据情绪推荐音乐
   async recommendMusic(req, res) {
     try {
       const { emotion, confidence, userId } = req.body;
       
-      // 验证必要参数
-      if (!emotion || !confidence) {
+      if (!emotion || typeof confidence !== 'number' || !Number.isFinite(confidence)) {
         return res.status(400).json({
           code: 400,
           message: '参数错误'
         });
       }
       
-      // 验证情绪值
       if (!emotionMapping[emotion]) {
         return res.status(400).json({
           code: 400,
@@ -46,7 +56,6 @@ const MusicController = {
         });
       }
       
-      // 验证置信度范围
       if (confidence < 0 || confidence > 1) {
         return res.status(400).json({
           code: 400,
@@ -54,12 +63,10 @@ const MusicController = {
         });
       }
       
-      // 获取情绪配置
       const emotionConfig = emotionMapping[emotion];
       
-      // 根据情绪类型查询对应的歌曲
       let categoryQuery = [];
-      if (emotion === 'happy,excited') {
+      if (['happy,excited','happy','excited'].includes(emotion)) {
         categoryQuery = ['happy', 'excited'];
       } else if (emotion === 'sad') {
         categoryQuery = ['sad'];
@@ -67,24 +74,17 @@ const MusicController = {
         categoryQuery = ['calm'];
       }
       
-      // 查询推荐音乐
-      let songs = await db.Song.find({ category: { $in: categoryQuery } }).select('id title artist cover url duration category').limit(10).exec();
+      let songs = await db.Song.findByMood(categoryQuery, 10);
       
-      // 如果没有找到对应类别的歌曲，使用默认查询
       if (songs.length === 0) {
-        songs = await db.Song.find().select('id title artist cover url duration category').limit(10).exec();
+        songs = await db.Song.findAll({ limit: 10 });
       }
       
-      // 格式化结果
       const recommendedSongs = songs.map(song => {
+        const formatted = formatSong(req, song);
         return {
-          id: song._id,
-          title: song.title,
-          artist: song.artist || 'Unknown Artist',
-          cover: toAbsoluteUrl(req, song.cover) || '',
-          url: toAbsoluteUrl(req, song.url),
-          duration: song.duration || 0,
-          emotion: song.category || emotion.split(',')[0] // 使用歌曲的实际类别作为情绪标签
+          ...formatted,
+          emotion: song.mood_type || emotion.split(',')[0]
         };
       });
 
@@ -104,13 +104,11 @@ const MusicController = {
     }
   },
   
-  // 获取音乐详情
   async getMusicById(req, res) {
     try {
       const { id } = req.params;
       
-      // 查询音乐详情
-      const song = await db.Song.findById(id).exec();
+      const song = await db.Song.findById(id);
       
       if (!song) {
         return res.status(404).json({
@@ -120,13 +118,15 @@ const MusicController = {
       }
       
       const formatted = {
-        id: song._id,
-        title: song.title,
+        id: song.id,
+        title: song.song_name,
         artist: song.artist || 'Unknown Artist',
-        cover: toAbsoluteUrl(req, song.cover) || '',
-        url: toAbsoluteUrl(req, song.url),
+        cover: toAbsoluteUrl(req, song.cover_url) || '',
+        url: toAbsoluteUrl(req, song.music_url),
+        bg_url: toAbsoluteUrl(req, song.bg_url),
+        mood_type: song.mood_type,
         duration: song.duration || 0,
-        emotion: 'neutral', // 默认情绪，实际应该根据音乐特征分析
+        emotion: 'neutral',
         lyrics: song.lyrics || ''
       };
 
@@ -142,7 +142,35 @@ const MusicController = {
         message: '服务器内部错误'
       });
     }
+  },
+  
+
+  async generateMusic(req, res) {
+    try {
+    // 1. 获取前端传递过来的参数
+    const {  prompt } = req.body; 
+    
+    console.log("用户音乐描述：",prompt);
+ 
+    const mockSongUrl = "https://www.learningcontainer.com/wp-content/uploads/2020/02/Kalimba.mp3";
+    
+    // 4. 返回结果
+    return res.status(200).json({
+      code: 200,
+      message: "生成成功",
+      song_url: mockSongUrl // 对应你图片里要求的返回字段
+    });
+    
+  } catch (error) {
+    // 5. 异常捕获
+    console.error("生成音乐报错：", error);
+    return res.status(500).json({
+      code: 500,
+      message: "服务器内部错误",
+      error: error.message
+    });
   }
+}
 };
 
 module.exports = MusicController;

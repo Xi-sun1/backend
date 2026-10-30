@@ -16,4 +16,6 @@ router.post('/', authMiddleware, likedSongController.upload, likedSongController
 // 删除音乐（仅允许拥有者删除）
 router.delete('/:id', authMiddleware, likedSongController.deleteMusic);
 
+//生成音乐
+router.post('/generate',musicController.generateMusic);
 module.exports = router;

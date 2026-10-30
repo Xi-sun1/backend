@@ -3,7 +3,7 @@ const jwt = require('jsonwebtoken');
 const mysql = require('mysql2');
 const config = require('../config/config');
 
-const db = mysql.createConnection(config.database);
+const db = mysql.createPool(config.database);
 
 const AuthController = {
   // 登录
@@ -125,7 +125,7 @@ const AuthController = {
 
   // 获取当前用户信息
   getCurrentUser(req, res) {
-    const userId = req.user && req.user.userId;
+    const userId = req.user && req.user.id;
 
     if (!userId) {
       return res.status(401).json({
